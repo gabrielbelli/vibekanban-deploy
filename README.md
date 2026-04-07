@@ -59,7 +59,9 @@ graph TD
 | Git operations, branches, PRs | Server web UI → local agent executes |
 | Agent conversations, logs | Visible in server UI, stored on dev machine |
 
-> **Note:** each dev only sees workspaces from their own connected machines. Team members see their own.
+> **Important:** the git repos live on each dev machine, not the server. Each dev needs to clone the repos they work on locally and configure them in the local agent. The server just controls what happens — the actual code and git operations run on the dev's machine.
+
+> Each dev only sees workspaces from their own connected machines. Team members see their own.
 
 ---
 
