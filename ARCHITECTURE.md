@@ -2,59 +2,47 @@
 
 ## Overview
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Your Server                         │
-│                                                         │
-│  ┌──────────┐   ┌──────────┐   ┌────────────────────┐  │
-│  │ Postgres │◄──┤   App    │──►│    ElectricSQL      │  │
-│  │   (db)   │◄──┤ (remote) │   │ (real-time sync)    │  │
-│  └────┬─────┘   └────┬─────┘   └────────────────────┘  │
-│       │              │ :8081                             │
-│       │         ┌────┴─────┐                            │
-│       └────────►│  Relay   │                            │
-│                 │ (tunnel) │                            │
-│                 └────┬─────┘                            │
-│                      │ :8082                            │
-│  ┌───────────────────┴──────────────────────────────┐   │
-│  │           Reverse Proxy (nginx)                  │   │
-│  │         :443 → app    :8443 → relay              │   │
-│  └──────────────────────────────────────────────────┘   │
-└───────────────┬─────────────────────┬───────────────────┘
-                │                     │
-          ┌─────┴──────┐        ┌─────┴──────┐
-          │  Browser   │        │  Browser   │
-          │  (Web UI)  │        │  (Web UI)  │
-          └────────────┘        └────────────┘
+```mermaid
+graph TB
+    subgraph server["Your Server"]
+        proxy["Reverse Proxy<br/>(nginx)<br/>:443 → app | :8443 → relay"]
+        app["App Server<br/>(remote)<br/>:8081"]
+        relay["Relay Server<br/>(tunnel)<br/>:8082"]
+        db[(Postgres)]
+        electric["ElectricSQL<br/>(real-time sync)"]
+
+        proxy --> app
+        proxy --> relay
+        app --> db
+        relay --> db
+        electric --> db
+        app --> electric
+    end
+
+    browser["Browser<br/>(Web UI)"]
+    browser -->|HTTPS| proxy
+
+    dev["Developer's Machine<br/>(npx vibe-kanban)"]
+    dev -->|WebSocket| proxy
 ```
 
 ## How the relay tunnel works
 
 The relay lets the web UI control local machines that aren't directly reachable (behind NAT, firewalls, etc.).
 
-```
- Developer's machine                Your Server                 Browser
-┌──────────────────┐     ┌─────────────────────────┐     ┌──────────────┐
-│                  │     │                         │     │              │
-│  npx vibe-kanban │     │       Relay Server      │     │   Web UI     │
-│                  │     │                         │     │              │
-│  1. Connects ────────► │  WebSocket at           │     │              │
-│     via WebSocket│     │  /v1/relay/connect      │     │              │
-│                  │     │                         │     │              │
-│                  │     │  2. Registers machine   │     │              │
-│                  │     │     with ID + name      │     │              │
-│                  │     │                         │     │              │
-│                  │     │         ◄──────────────────── │ 3. User opens │
-│                  │     │           HTTP request   │     │    workspace │
-│                  │     │                         │     │              │
-│  4. Relay sends  │◄── │  Forwards request via   │     │              │
-│     request to   │     │  yamux stream over the  │     │              │
-│     local server │     │  existing WebSocket     │     │              │
-│                  │     │                         │     │              │
-│  5. Local server │───► │  Response tunnelled     │────►│ 6. UI shows  │
-│     responds     │     │  back through relay     │     │    result    │
-│                  │     │                         │     │              │
-└──────────────────┘     └─────────────────────────┘     └──────────────┘
+```mermaid
+sequenceDiagram
+    participant dev as Developer's Machine<br/>(npx vibe-kanban)
+    participant relay as Relay Server
+    participant browser as Browser (Web UI)
+
+    dev->>relay: 1. Connect via WebSocket<br/>/v1/relay/connect
+    relay-->>dev: 2. Registered (machine ID + name)
+
+    browser->>relay: 3. User opens a workspace
+    relay->>dev: 4. Forward request via<br/>yamux stream over WebSocket
+    dev->>relay: 5. Local server responds
+    relay->>browser: 6. Response tunnelled back
 ```
 
 **Key points:**
@@ -65,15 +53,15 @@ The relay lets the web UI control local machines that aren't directly reachable 
 
 ## Data flow
 
-```
-Browser ──► App Server ──► Postgres
-                │               ▲
-                │               │
-                ▼               │
-           ElectricSQL ─────────┘
-           (real-time sync)
+```mermaid
+graph LR
+    browser["Browser"] -->|HTTPS| app["App Server"]
+    app --> db[(Postgres)]
+    electric["ElectricSQL"] <--> db
+    app --> electric
 
-Browser ──► Relay Server ──(WebSocket)──► Developer's machine
+    browser2["Browser"] -->|HTTPS| relay["Relay Server"]
+    relay -->|WebSocket| dev["Developer's Machine"]
 ```
 
 - **App server** handles auth, API, and serves the web UI
