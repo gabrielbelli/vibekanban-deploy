@@ -4,19 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
-# --- Detect LAN IP if not set ---
-if [ -z "$LAN_IP" ]; then
-  if command -v ip &>/dev/null; then
-    LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}' | head -1)
-  elif command -v ipconfig &>/dev/null; then
-    LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
-  fi
-fi
-if [ -z "$LAN_IP" ]; then
-  echo "Could not detect LAN IP. Set it in config.sh"
-  exit 1
-fi
-echo "LAN IP: $LAN_IP"
+echo "App URL:   $APP_URL"
+echo "Relay URL: $RELAY_URL"
 
 # --- Clone source repo ---
 if [ ! -d "$REPO_DIR" ]; then
@@ -37,8 +26,12 @@ VIBEKANBAN_REMOTE_JWT_SECRET=$(openssl rand -base64 48)
 ELECTRIC_ROLE_PASSWORD=$(openssl rand -base64 32)
 DB_PASSWORD=$(openssl rand -base64 32)
 
-# Network
-LAN_IP=${LAN_IP}
+# URLs
+APP_URL=${APP_URL}
+RELAY_URL=${RELAY_URL}
+
+# Proxy
+PROXY_ENABLED=${PROXY_ENABLED}
 BIND_ADDR=${BIND_ADDR}
 HTTPS_PORT=${HTTPS_PORT}
 RELAY_PORT=${RELAY_PORT}
@@ -108,20 +101,32 @@ else
   echo ".env already exists, skipping. Delete it and re-run to regenerate."
 fi
 
-# --- Generate self-signed cert ---
-if [ ! -f selfsigned.crt ]; then
-  echo "Generating self-signed certificate..."
-  openssl req -x509 -newkey rsa:${CERT_KEY_BITS} -days ${CERT_DAYS} -nodes \
-    -keyout selfsigned.key \
-    -out selfsigned.crt \
-    -subj "/CN=${LAN_IP}" \
-    -addext "subjectAltName=IP:${LAN_IP}" 2>/dev/null
-else
-  echo "Certificate already exists, skipping."
+# --- Generate self-signed cert (only when proxy is enabled) ---
+if [ "${PROXY_ENABLED}" = "true" ]; then
+  if [ ! -f selfsigned.crt ]; then
+    # Extract host from APP_URL (strip scheme and port)
+    HOST=$(echo "$APP_URL" | sed 's|https\?://||; s|:.*||')
+
+    # Determine SAN type (IP or DNS)
+    if echo "$HOST" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+      SAN="IP:${HOST}"
+    else
+      SAN="DNS:${HOST}"
+    fi
+
+    echo "Generating self-signed certificate for ${HOST}..."
+    openssl req -x509 -newkey rsa:${CERT_KEY_BITS} -days ${CERT_DAYS} -nodes \
+      -keyout selfsigned.key \
+      -out selfsigned.crt \
+      -subj "/CN=${HOST}" \
+      -addext "subjectAltName=${SAN}" 2>/dev/null
+  else
+    echo "Certificate already exists, skipping."
+  fi
 fi
 
 echo ""
 echo "Done. Next steps:"
 echo "  1. Edit config.sh if needed, delete .env, re-run ./setup.sh"
 echo "  2. Run: ./up.sh"
-echo "  3. Open https://${LAN_IP}:${HTTPS_PORT}"
+echo "  3. Open ${APP_URL}"

@@ -1,0 +1,53 @@
+services:
+  # Override app and relay to not expose ports directly —
+  # the proxy handles external traffic.
+  app:
+    ports: !override
+      - "127.0.0.1:8081:8081"
+
+  relay:
+    ports: !override
+      - "127.0.0.1:8082:8082"
+
+  proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+      - "${BIND_ADDR:-0.0.0.0}:${RELAY_PORT:-8443}:8443"
+    volumes:
+      - ./selfsigned.crt:/etc/nginx/selfsigned.crt:ro
+      - ./selfsigned.key:/etc/nginx/selfsigned.key:ro
+    depends_on:
+      - app
+      - relay
+    command: |
+      sh -c 'cat > /etc/nginx/conf.d/default.conf <<EOF
+      server {
+          listen 443 ssl;
+          ssl_certificate /etc/nginx/selfsigned.crt;
+          ssl_certificate_key /etc/nginx/selfsigned.key;
+          location / {
+              proxy_pass http://app:8081;
+              proxy_set_header Host \$$host;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade \$$http_upgrade;
+              proxy_set_header Connection "upgrade";
+          }
+      }
+      server {
+          listen 8443 ssl;
+          ssl_certificate /etc/nginx/selfsigned.crt;
+          ssl_certificate_key /etc/nginx/selfsigned.key;
+          location / {
+              proxy_pass http://relay:8082;
+              proxy_set_header Host \$$host;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade \$$http_upgrade;
+              proxy_set_header Connection "upgrade";
+          }
+      }
+      EOF
+      nginx -g "daemon off;"'

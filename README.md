@@ -1,16 +1,66 @@
 # vibekanban-deploy
 
-Self-hosted [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) on your LAN with self-signed HTTPS.
+Self-hosted [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) deployment kit.
 
 ## Quick start
 
 ```bash
-vim config.sh           # set your LAN IP and auth credentials
+vim config.sh           # set your URLs and auth credentials
 ./setup.sh              # clones repo, generates secrets + cert
 ./up.sh                 # builds and starts everything
 ```
 
-Open `https://<your-lan-ip>` and accept the cert warning.
+Open your `APP_URL` and accept the cert warning (if using self-signed).
+
+## Deployment modes
+
+### LAN with self-signed certs (default)
+
+Set IP-based URLs and leave the built-in proxy enabled:
+
+```sh
+APP_URL=https://192.168.1.177
+RELAY_URL=https://192.168.1.177:8443
+PROXY_ENABLED=true
+```
+
+### Domain with your own reverse proxy
+
+Point your proxy at the app (port 8081) and relay (port 8082), and disable the built-in one:
+
+```sh
+APP_URL=https://kanban.example.com
+RELAY_URL=https://relay.kanban.example.com
+PROXY_ENABLED=false
+```
+
+Your reverse proxy needs to support WebSocket upgrades for the relay. Example nginx config:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name kanban.example.com;
+    # ... your TLS config ...
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name relay.kanban.example.com;
+    # ... your TLS config ...
+    location / {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
 
 ## Scripts
 
@@ -26,7 +76,7 @@ Open `https://<your-lan-ip>` and accept the cert warning.
 
 All settings live in `config.sh`. After editing, delete `.env` and re-run `./setup.sh` to apply.
 
-See `config.sh` for the full list of options — only the first section (LAN IP + one auth method) is required. Everything else (email, attachments, billing, observability, etc.) is optional and disabled by default.
+See `config.sh` for the full list of options — only `APP_URL`, `RELAY_URL`, and one auth method are required. Everything else (email, attachments, billing, observability, etc.) is optional and disabled by default.
 
 ## Authentication
 
@@ -40,8 +90,8 @@ Set at least one in `config.sh`:
 2. Click **New OAuth App**
 3. Fill in:
    - **Application name**: anything (e.g. "Vibe Kanban")
-   - **Homepage URL**: `https://<LAN_IP>`
-   - **Authorisation callback URL**: `https://<LAN_IP>/v1/oauth/github/callback`
+   - **Homepage URL**: your `APP_URL`
+   - **Authorisation callback URL**: `<APP_URL>/v1/oauth/github/callback`
 4. Click **Register application**
 5. Copy the **Client ID** and generate a **Client Secret**
 6. Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in `config.sh`
@@ -53,7 +103,7 @@ Set at least one in `config.sh`:
 3. Go to **OAuth consent screen**, select **External**, fill in the app name and your email, then save
 4. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
 5. Select **Web application**
-6. Under **Authorised redirect URIs**, add: `https://<LAN_IP>/v1/oauth/google/callback`
+6. Under **Authorised redirect URIs**, add: `<APP_URL>/v1/oauth/google/callback`
 7. Click **Create**
 8. Copy the **Client ID** and **Client Secret**
 9. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `config.sh`
@@ -63,16 +113,14 @@ Set at least one in `config.sh`:
 On each developer's machine:
 
 ```bash
-VK_SHARED_API_BASE=https://<LAN_IP> \
-VK_SHARED_RELAY_API_BASE=https://<LAN_IP>:<RELAY_PORT> \
+VK_SHARED_API_BASE=<APP_URL> \
+VK_SHARED_RELAY_API_BASE=<RELAY_URL> \
 npx vibe-kanban
 ```
 
-Default relay port is `8443` (configurable in `config.sh`).
-
 After logging in, the relay tunnel connects automatically — the remote web UI can then control local git repos.
 
-Visit `https://<LAN_IP>:<RELAY_PORT>` once in the browser to accept the cert warning for the relay endpoint.
+If using self-signed certs, visit the `RELAY_URL` once in the browser to accept the cert warning.
 
 ## Optional integrations
 
@@ -124,13 +172,6 @@ Error tracking and analytics — totally optional.
 - **PostHog**: set `POSTHOG_API_KEY` and `POSTHOG_API_ENDPOINT` ([PostHog docs](https://posthog.com/docs))
 - **Azure App Insights**: set `APPLICATIONINSIGHTS_CONNECTION_STRING` ([App Insights docs](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview))
 
-## Updating
-
-```bash
-cd vibekanban && git pull && cd ..
-./up.sh
-```
-
 ## Further reading
 
 - [Vibe Kanban documentation](https://vibekanban.com/docs)
@@ -141,9 +182,18 @@ cd vibekanban && git pull && cd ..
 - [Code review](https://vibekanban.com/docs/code-review)
 - [Troubleshooting](https://vibekanban.com/docs/troubleshooting)
 
+## Updating
+
+```bash
+cd vibekanban && git pull && cd ..
+./up.sh
+```
+
 ## Default ports
 
 | Port | Service | Configurable via |
 |------|---------|-----------------|
-| 443 | Web UI | `HTTPS_PORT` |
-| 8443 | Relay tunnel | `RELAY_PORT` |
+| 443 | Web UI (proxied) | `HTTPS_PORT` |
+| 8443 | Relay tunnel (proxied) | `RELAY_PORT` |
+| 8081 | App (direct, when `PROXY_ENABLED=false`) | `HTTPS_PORT` |
+| 8082 | Relay (direct, when `PROXY_ENABLED=false`) | `RELAY_PORT` |
