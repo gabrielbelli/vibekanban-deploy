@@ -29,8 +29,37 @@ graph LR
 ```
 
 **Two parts:**
-- **Server** — web UI for managing projects. You deploy this.
-- **Local agent** — runs on each dev machine (`npx vibe-kanban`). Connects *outward* to the server, so no ports to open.
+- **Server** (this repo deploys it) — the web UI where you do everything: manage projects, issues, kanban boards, and control coding agents on dev machines
+- **Local agent** (`npx vibe-kanban`) — runs on each dev machine, connects outward to the server. No ports to open.
+
+### How do you use it?
+
+Everything happens in the **server web UI**. Once a dev machine connects via the local agent, you can see and control it from the browser — create workspaces, run agents, manage branches, push PRs.
+
+The local agent just runs in the background. It doesn't need its own UI for daily use.
+
+```mermaid
+graph TD
+    ui["🌐 Server Web UI<br/>(the main interface)"]
+    issues["Issues, boards, tags,<br/>comments, members"]
+    workspaces["Workspaces, branches,<br/>agent sessions, PRs"]
+    agent["💻 Local Agent<br/>(background, on dev machine)"]
+
+    ui --> issues
+    ui --> workspaces
+    workspaces -->|controlled via relay| agent
+    agent -->|syncs back| workspaces
+```
+
+| What | Where |
+|------|-------|
+| Create issues, manage boards | Server web UI |
+| Invite team members | Server web UI |
+| Create workspaces, run agents | Server web UI (controls remote agents) |
+| Git operations, branches, PRs | Server web UI → local agent executes |
+| Agent conversations, logs | Visible in server UI, stored on dev machine |
+
+> **Note:** each dev only sees workspaces from their own connected machines. Team members see their own.
 
 ---
 
