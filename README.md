@@ -2,6 +2,69 @@
 
 Self-hosted [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) deployment kit.
 
+## What is Vibe Kanban?
+
+Vibe Kanban is a project management tool (like Jira or Linear) that can also control coding agents on your developers' machines — all from the browser.
+
+It has two parts:
+
+- **The server** (what this repo deploys) — a web app where your team manages projects, issues, and kanban boards
+- **The local agent** (runs on each developer's machine) — manages git repos and runs tasks locally, controlled from the server's web UI
+
+The server and local agents talk through a **relay tunnel**, so developers don't need to open any ports — the local agent connects outward to the server.
+
+```mermaid
+graph LR
+    browser["🌐 Browser"]
+    server["🖥️ Server<br/>(this repo deploys it)"]
+    dev1["💻 Dev machine 1<br/>(npx vibe-kanban)"]
+    dev2["💻 Dev machine 2<br/>(npx vibe-kanban)"]
+
+    browser -->|manage projects,<br/>control agents| server
+    dev1 -->|connects outward| server
+    dev2 -->|connects outward| server
+```
+
+### What runs on the server?
+
+```mermaid
+graph TB
+    subgraph server["Your Server"]
+        proxy["Reverse Proxy (nginx)<br/>handles HTTPS"]
+        app["App Server<br/>web UI + API"]
+        relay["Relay Server<br/>tunnels to dev machines"]
+        db[(Postgres<br/>stores everything)]
+        electric["ElectricSQL<br/>real-time sync"]
+
+        proxy -->|:443| app
+        proxy -->|:8443| relay
+        app <--> db
+        relay <--> db
+        electric <--> db
+    end
+```
+
+### How does the relay tunnel work?
+
+The relay lets the browser control local machines that aren't directly reachable (behind NAT, firewalls, home networks, etc.).
+
+```mermaid
+sequenceDiagram
+    participant dev as 💻 Developer's Machine
+    participant relay as 🖥️ Relay Server
+    participant browser as 🌐 Browser
+
+    dev->>relay: Connects outward via WebSocket<br/>(no ports to open!)
+    relay-->>dev: Registered ✓
+
+    browser->>relay: User wants to run a task
+    relay->>dev: Forwards request through<br/>the existing connection
+    dev->>relay: Sends back the result
+    relay->>browser: Shows the result
+```
+
+**The key idea:** the developer's machine connects *out* to the server — not the other way around. This means it works through firewalls and NAT without any port forwarding.
+
 ## Quick start
 
 ```bash
