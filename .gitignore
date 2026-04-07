@@ -1,0 +1,4 @@
+vibekanban/
+.env
+selfsigned.crt
+selfsigned.key
