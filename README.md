@@ -142,6 +142,7 @@ location / {
 | `down.sh` | Stops everything (`--volumes` to wipe data) |
 | `logs.sh` | Tail logs (pass service name to filter) |
 | `invite.sh` | Show pending invite links |
+| `connect.sh` | Print the command to connect a dev machine |
 
 ---
 
