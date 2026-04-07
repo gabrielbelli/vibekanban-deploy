@@ -87,9 +87,29 @@ RELAY_URL=https://192.168.1.177:8443
 PROXY_ENABLED=true
 ```
 
-### Domain with your own reverse proxy
+### Domain with an external reverse proxy
 
-Point your proxy at the app (port 8081) and relay (port 8082), and disable the built-in one:
+If you already have a reverse proxy (Caddy, Cloudflare, Traefik, etc.), the simplest approach is to **keep the built-in proxy running** and point your external proxy at it. This way you don't need to reconfigure internal ports:
+
+```sh
+APP_URL=https://kanban.example.com
+RELAY_URL=https://relay.kanban.example.com
+PROXY_ENABLED=true
+
+# Add your server's IP so the self-signed cert is valid for both
+# the domain (from APP_URL) and the IP (used by your external proxy)
+CERT_EXTRA_SANS="192.168.1.177"
+```
+
+Then point your external proxy at the built-in one:
+- `kanban.example.com` → `https://192.168.1.177:443`
+- `relay.kanban.example.com` → `https://192.168.1.177:8443`
+
+Your external proxy will need to skip TLS verification for the self-signed cert, or you can trust it explicitly.
+
+### Domain without the built-in proxy
+
+If you'd rather have your proxy talk directly to the backend over plain HTTP, disable the built-in proxy:
 
 ```sh
 APP_URL=https://kanban.example.com
