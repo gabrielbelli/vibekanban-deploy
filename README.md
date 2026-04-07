@@ -1,40 +1,49 @@
 # vibekanban-deploy
 
-Self-hosted [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) deployment kit.
+> Deploy [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) on your own server in 3 commands.
 
-## What is Vibe Kanban?
+## TL;DR
 
-Vibe Kanban is a project management tool (like Jira or Linear) that can also control coding agents on your developers' machines — all from the browser.
+```bash
+vim config.sh    # set your URL + pick a login method
+./setup.sh       # clones repo, generates secrets + cert
+./up.sh          # done — open your APP_URL
+```
 
-It has two parts:
+---
 
-- **The server** (what this repo deploys) — a web app where your team manages projects, issues, and kanban boards
-- **The local agent** (runs on each developer's machine) — manages git repos and runs tasks locally, controlled from the server's web UI
+## What is this?
 
-The server and local agents talk through a **relay tunnel**, so developers don't need to open any ports — the local agent connects outward to the server.
+Vibe Kanban = project management (like Jira) + remote control of coding agents on dev machines.
 
 ```mermaid
 graph LR
     browser["🌐 Browser"]
-    server["🖥️ Server<br/>(this repo deploys it)"]
-    dev1["💻 Dev machine 1<br/>(npx vibe-kanban)"]
-    dev2["💻 Dev machine 2<br/>(npx vibe-kanban)"]
+    server["🖥️ Server<br/>(this repo)"]
+    dev1["💻 Dev 1"]
+    dev2["💻 Dev 2"]
 
-    browser -->|manage projects,<br/>control agents| server
-    dev1 -->|connects outward| server
-    dev2 -->|connects outward| server
+    browser -->|boards, issues,<br/>control agents| server
+    dev1 -->|connects out| server
+    dev2 -->|connects out| server
 ```
 
-### What runs on the server?
+**Two parts:**
+- **Server** — web UI for managing projects. You deploy this.
+- **Local agent** — runs on each dev machine (`npx vibe-kanban`). Connects *outward* to the server, so no ports to open.
+
+---
+
+## What's inside the server?
 
 ```mermaid
 graph TB
-    subgraph server["Your Server"]
-        proxy["Reverse Proxy (nginx)<br/>handles HTTPS"]
-        app["App Server<br/>web UI + API"]
-        relay["Relay Server<br/>tunnels to dev machines"]
-        db[(Postgres<br/>stores everything)]
-        electric["ElectricSQL<br/>real-time sync"]
+    subgraph s["Your Server"]
+        proxy["nginx<br/>HTTPS"]
+        app["App<br/>UI + API"]
+        relay["Relay<br/>tunnel to devs"]
+        db[(Postgres)]
+        electric["ElectricSQL<br/>sync"]
 
         proxy -->|:443| app
         proxy -->|:8443| relay
@@ -44,42 +53,41 @@ graph TB
     end
 ```
 
-### How does the relay tunnel work?
+| Container | Job |
+|-----------|-----|
+| **App** | Web UI, API, auth |
+| **Relay** | Tunnels browser requests to dev machines |
+| **Postgres** | Stores everything |
+| **ElectricSQL** | Real-time sync |
+| **nginx** | HTTPS termination |
 
-The relay lets the browser control local machines that aren't directly reachable (behind NAT, firewalls, home networks, etc.).
+---
+
+## How does the relay work?
+
+> Dev machines connect *out* to the server. No port forwarding needed.
 
 ```mermaid
 sequenceDiagram
-    participant dev as 💻 Developer's Machine
-    participant relay as 🖥️ Relay Server
+    participant dev as 💻 Dev Machine
+    participant relay as 🖥️ Relay
     participant browser as 🌐 Browser
 
-    dev->>relay: Connects outward via WebSocket<br/>(no ports to open!)
+    dev->>relay: Opens WebSocket (outbound)
     relay-->>dev: Registered ✓
-
-    browser->>relay: User wants to run a task
-    relay->>dev: Forwards request through<br/>the existing connection
-    dev->>relay: Sends back the result
-    relay->>browser: Shows the result
+    browser->>relay: "Run this task"
+    relay->>dev: Forwards via WebSocket
+    dev->>relay: Result
+    relay->>browser: Done
 ```
 
-**The key idea:** the developer's machine connects *out* to the server — not the other way around. This means it works through firewalls and NAT without any port forwarding.
+---
 
-## Quick start
+## Deployment options
 
-```bash
-vim config.sh           # set your URLs and auth credentials
-./setup.sh              # clones repo, generates secrets + cert
-./up.sh                 # builds and starts everything
-```
+### Option A: LAN (default)
 
-Open your `APP_URL` and accept the cert warning (if using self-signed).
-
-## Deployment modes
-
-### LAN with self-signed certs (default)
-
-Set IP-based URLs and leave the built-in proxy enabled:
+Self-signed cert, access by IP.
 
 ```sh
 APP_URL=https://192.168.1.177
@@ -87,29 +95,24 @@ RELAY_URL=https://192.168.1.177:8443
 PROXY_ENABLED=true
 ```
 
-### Domain with an external reverse proxy
+### Option B: Domain + external proxy (recommended)
 
-If you already have a reverse proxy (Caddy, Cloudflare, Traefik, etc.), the simplest approach is to **keep the built-in proxy running** and point your external proxy at it. This way you don't need to reconfigure internal ports:
+Keep the built-in proxy and point your external one (Caddy, Cloudflare, etc.) at it:
 
 ```sh
 APP_URL=https://kanban.example.com
 RELAY_URL=https://relay.kanban.example.com
 PROXY_ENABLED=true
-
-# Add your server's IP so the self-signed cert is valid for both
-# the domain (from APP_URL) and the IP (used by your external proxy)
-CERT_EXTRA_SANS="192.168.1.177"
+CERT_EXTRA_SANS="192.168.1.177"  # so the self-signed cert works for your proxy too
 ```
 
-Then point your external proxy at the built-in one:
-- `kanban.example.com` → `https://192.168.1.177:443`
-- `relay.kanban.example.com` → `https://192.168.1.177:8443`
+Then in your external proxy:
+- `kanban.example.com` → `https://<server-ip>:443`
+- `relay.kanban.example.com` → `https://<server-ip>:8443`
 
-Your external proxy will need to skip TLS verification for the self-signed cert, or you can trust it explicitly.
+### Option C: Domain, no built-in proxy
 
-### Domain without the built-in proxy
-
-If you'd rather have your proxy talk directly to the backend over plain HTTP, disable the built-in proxy:
+Your proxy talks directly to the backend over HTTP:
 
 ```sh
 APP_URL=https://kanban.example.com
@@ -117,81 +120,70 @@ RELAY_URL=https://relay.kanban.example.com
 PROXY_ENABLED=false
 ```
 
-Your reverse proxy needs to support WebSocket upgrades for the relay. Example nginx config:
+Point your proxy at `http://127.0.0.1:8081` (app) and `http://127.0.0.1:8082` (relay). The relay needs WebSocket upgrade support:
 
 ```nginx
-server {
-    listen 443 ssl;
-    server_name kanban.example.com;
-    # ... your TLS config ...
-    location / {
-        proxy_pass http://127.0.0.1:8081;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name relay.kanban.example.com;
-    # ... your TLS config ...
-    location / {
-        proxy_pass http://127.0.0.1:8082;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
+location / {
+    proxy_pass http://127.0.0.1:8082;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
 }
 ```
+
+---
 
 ## Scripts
 
 | Script | What it does |
-|--------|-------------|
-| `setup.sh` | Clones vibekanban, generates `.env` and self-signed cert from `config.sh` |
-| `up.sh` | Builds and starts all containers |
-| `down.sh` | Stops all containers (pass `--volumes` to delete data) |
-| `logs.sh` | Tails container logs (pass service name to filter) |
-| `invite.sh` | Lists pending invite links (no email service needed) |
+|--------|-----|
+| `setup.sh` | Clones repo, generates secrets + cert |
+| `up.sh` | Starts everything |
+| `down.sh` | Stops everything (`--volumes` to wipe data) |
+| `logs.sh` | Tail logs (pass service name to filter) |
+| `invite.sh` | Show pending invite links |
+
+---
 
 ## Configuration
 
-All settings live in `config.sh`. After editing, delete `.env` and re-run `./setup.sh` to apply.
+Everything is in **`config.sh`**. After editing: `rm .env && ./setup.sh && ./up.sh`
 
-See `config.sh` for the full list of options — only `APP_URL`, `RELAY_URL`, and one auth method are required. Everything else (email, attachments, billing, observability, etc.) is optional and disabled by default.
+Only `APP_URL`, `RELAY_URL`, and one login method are required. The rest is optional.
 
-## Authentication
+---
 
-Set at least one in `config.sh`:
+## Login methods
 
-**Local auth** (simplest) — set `SELF_HOST_LOCAL_AUTH_EMAIL` and `SELF_HOST_LOCAL_AUTH_PASSWORD`. Creates a bootstrap admin account on first start. No external services needed.
+Pick at least one in `config.sh`:
+
+### Local auth (easiest)
+
+Just set an email and password. No external services.
+
+```sh
+SELF_HOST_LOCAL_AUTH_EMAIL=admin@example.com
+SELF_HOST_LOCAL_AUTH_PASSWORD=changeme
+```
 
 ### GitHub OAuth
 
-1. Go to https://github.com/settings/developers
-2. Click **New OAuth App**
-3. Fill in:
-   - **Application name**: anything (e.g. "Vibe Kanban")
-   - **Homepage URL**: your `APP_URL`
-   - **Authorisation callback URL**: `<APP_URL>/v1/oauth/github/callback`
-4. Click **Register application**
-5. Copy the **Client ID** and generate a **Client Secret**
-6. Set `GITHUB_OAUTH_CLIENT_ID` and `GITHUB_OAUTH_CLIENT_SECRET` in `config.sh`
+1. https://github.com/settings/developers → **New OAuth App**
+2. **Homepage URL**: your `APP_URL`
+3. **Callback URL**: `<APP_URL>/v1/oauth/github/callback`
+4. Copy Client ID + Client Secret → `config.sh`
 
 ### Google OAuth
 
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Create a project if you don't have one
-3. Go to **OAuth consent screen**, select **External**, fill in the app name and your email, then save
-4. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
-5. Select **Web application**
-6. Under **Authorised redirect URIs**, add: `<APP_URL>/v1/oauth/google/callback`
-7. Click **Create**
-8. Copy the **Client ID** and **Client Secret**
-9. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `config.sh`
+1. https://console.cloud.google.com/apis/credentials
+2. Create project → **OAuth consent screen** (External) → save
+3. **Credentials** → **Create** → **OAuth client ID** → Web application
+4. **Redirect URI**: `<APP_URL>/v1/oauth/google/callback`
+5. Copy Client ID + Client Secret → `config.sh`
 
-## Connect local machines
+---
+
+## Connect dev machines
 
 On each developer's machine:
 
@@ -201,69 +193,9 @@ VK_SHARED_RELAY_API_BASE=<RELAY_URL> \
 npx vibe-kanban
 ```
 
-After logging in, the relay tunnel connects automatically — the remote web UI can then control local git repos.
+Self-signed cert? Visit the `RELAY_URL` in a browser first to accept the warning.
 
-If using self-signed certs, visit the `RELAY_URL` once in the browser to accept the cert warning.
-
-## Optional integrations
-
-These are all disabled by default. Set the relevant values in `config.sh` to enable them.
-
-### GitHub App
-
-Deeper GitHub integration — webhooks, automated actions, and PR workflows. Different from GitHub OAuth (which is just for login).
-
-1. Follow the [GitHub App creation guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
-2. Set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`, and `GITHUB_APP_SLUG` in `config.sh`
-
-### Email notifications (Loops)
-
-Sends invite emails and review notifications. Without this, everything still works — you just share invite links manually using `./invite.sh`.
-
-1. Sign up at [Loops](https://loops.so)
-2. Create transactional email templates for invites, review ready, and review failed
-3. Set `LOOPS_EMAIL_API_KEY` and the template IDs in `config.sh`
-
-### File attachments (Azure Blob Storage)
-
-Enables file uploads on issues. Works with Azure Blob Storage or any S3-compatible service (e.g. [MinIO](https://min.io)) via the endpoint URL override.
-
-1. Create a storage account and container ([Azure quickstart](https://learn.microsoft.com/en-us/azure/storage/blobs/storage-quickstart-blobs-portal))
-2. Set the `AZURE_STORAGE_*` values in `config.sh`
-
-### Code review artifacts (Cloudflare R2)
-
-Stores code review output. Only needed if you use the review feature.
-
-1. Create an R2 bucket ([Cloudflare R2 docs](https://developers.cloudflare.com/r2/get-started/))
-2. Create an API token with read/write access
-3. Set the `R2_*` values in `config.sh`
-
-### Billing (Stripe)
-
-Only relevant if you want to charge for team seats.
-
-1. Get your API keys from the [Stripe dashboard](https://dashboard.stripe.com/apikeys)
-2. Create a price for team seats
-3. Set the `STRIPE_*` values in `config.sh`
-
-### Observability
-
-Error tracking and analytics — totally optional.
-
-- **Sentry**: set `SENTRY_DSN_REMOTE` ([Sentry docs](https://docs.sentry.io))
-- **PostHog**: set `POSTHOG_API_KEY` and `POSTHOG_API_ENDPOINT` ([PostHog docs](https://posthog.com/docs))
-- **Azure App Insights**: set `APPLICATIONINSIGHTS_CONNECTION_STRING` ([App Insights docs](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview))
-
-## Further reading
-
-- [Vibe Kanban documentation](https://vibekanban.com/docs)
-- [Official Docker deployment guide](https://vibekanban.com/docs/self-hosting/deploy-docker)
-- [GitHub integration](https://vibekanban.com/docs/integrations/github)
-- [MCP servers](https://vibekanban.com/docs/integrations/mcp-servers)
-- [Supported coding agents](https://vibekanban.com/docs/agents)
-- [Code review](https://vibekanban.com/docs/code-review)
-- [Troubleshooting](https://vibekanban.com/docs/troubleshooting)
+---
 
 ## Updating
 
@@ -272,11 +204,51 @@ cd vibekanban && git pull && cd ..
 ./up.sh
 ```
 
-## Default ports
+---
 
-| Port | Service | Configurable via |
-|------|---------|-----------------|
+<details>
+<summary><strong>Optional integrations</strong> (click to expand)</summary>
+
+All disabled by default. Set values in `config.sh` to enable.
+
+### GitHub App
+Webhooks, automated actions, PR workflows. ([setup guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app))
+
+### Email — Loops
+Invite emails + review notifications. Without it, use `./invite.sh` to share links manually. ([loops.so](https://loops.so))
+
+### File attachments — Azure Blob Storage
+Issue file uploads. Also works with S3-compatible services like [MinIO](https://min.io). ([Azure quickstart](https://learn.microsoft.com/en-us/azure/storage/blobs/storage-quickstart-blobs-portal))
+
+### Code review — Cloudflare R2
+Stores review artifacts. ([R2 docs](https://developers.cloudflare.com/r2/get-started/))
+
+### Billing — Stripe
+Charge for team seats. ([Stripe dashboard](https://dashboard.stripe.com/apikeys))
+
+### Observability
+- [Sentry](https://docs.sentry.io) — `SENTRY_DSN_REMOTE`
+- [PostHog](https://posthog.com/docs) — `POSTHOG_API_KEY`
+- [Azure App Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview) — `APPLICATIONINSIGHTS_CONNECTION_STRING`
+
+</details>
+
+---
+
+<details>
+<summary><strong>Ports reference</strong></summary>
+
+| Port | Service | Config |
+|------|---------|--------|
 | 443 | Web UI (proxied) | `HTTPS_PORT` |
-| 8443 | Relay tunnel (proxied) | `RELAY_PORT` |
-| 8081 | App (direct, when `PROXY_ENABLED=false`) | `HTTPS_PORT` |
-| 8082 | Relay (direct, when `PROXY_ENABLED=false`) | `RELAY_PORT` |
+| 8443 | Relay (proxied) | `RELAY_PORT` |
+| 8081 | App (direct) | when `PROXY_ENABLED=false` |
+| 8082 | Relay (direct) | when `PROXY_ENABLED=false` |
+
+</details>
+
+---
+
+## Further reading
+
+[Docs](https://vibekanban.com/docs) · [Docker guide](https://vibekanban.com/docs/self-hosting/deploy-docker) · [GitHub integration](https://vibekanban.com/docs/integrations/github) · [MCP servers](https://vibekanban.com/docs/integrations/mcp-servers) · [Agents](https://vibekanban.com/docs/agents) · [Code review](https://vibekanban.com/docs/code-review) · [Troubleshooting](https://vibekanban.com/docs/troubleshooting)
