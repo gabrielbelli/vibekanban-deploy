@@ -71,6 +71,14 @@ RELAY_PORT=8443
 CERT_DAYS=1825
 CERT_KEY_BITS=2048
 
+# Extra Subject Alternative Names for the self-signed cert.
+# Useful when an external proxy sits in front of the built-in nginx and
+# connects to it by a different hostname or IP than what's in APP_URL.
+# Space-separated list of IPs or DNS names. Leave empty if not needed.
+#
+# Example: CERT_EXTRA_SANS="192.168.1.177 10.0.0.5 kanban.local"
+CERT_EXTRA_SANS=""
+
 
 # ========================== EVERYTHING BELOW IS OPTIONAL ====================
 # Leave values empty to disable. The server works fine without any of these.

@@ -107,19 +107,22 @@ if [ "${PROXY_ENABLED}" = "true" ]; then
     # Extract host from APP_URL (strip scheme and port)
     HOST=$(echo "$APP_URL" | sed 's|https\?://||; s|:.*||')
 
-    # Determine SAN type (IP or DNS)
-    if echo "$HOST" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
-      SAN="IP:${HOST}"
-    else
-      SAN="DNS:${HOST}"
-    fi
+    # Build SAN list starting with the primary host
+    SANS=""
+    for entry in $HOST ${CERT_EXTRA_SANS:-}; do
+      if echo "$entry" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+        SANS="${SANS:+${SANS},}IP:${entry}"
+      else
+        SANS="${SANS:+${SANS},}DNS:${entry}"
+      fi
+    done
 
-    echo "Generating self-signed certificate for ${HOST}..."
+    echo "Generating self-signed certificate (SANs: ${SANS})..."
     openssl req -x509 -newkey rsa:${CERT_KEY_BITS} -days ${CERT_DAYS} -nodes \
       -keyout selfsigned.key \
       -out selfsigned.crt \
       -subj "/CN=${HOST}" \
-      -addext "subjectAltName=${SAN}" 2>/dev/null
+      -addext "subjectAltName=${SANS}" 2>/dev/null
   else
     echo "Certificate already exists, skipping."
   fi
