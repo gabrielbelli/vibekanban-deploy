@@ -37,24 +37,31 @@ APP_URL=https://192.168.1.177
 RELAY_URL=https://192.168.1.177:8443
 
 # --- Authentication ---
-# At least one login method must be configured:
+# At least one login method must be configured.
 #
-# Option 1: GitHub OAuth
+# Local auth (default) — works out of the box, no external services needed.
+# The server checks these on every startup. Clear both to disable local auth.
+#
+# Recommended flow:
+#   1. Deploy with local auth → log in → set up your team
+#   2. Add OAuth credentials below
+#   3. Clear SELF_HOST_LOCAL_AUTH_EMAIL and SELF_HOST_LOCAL_AUTH_PASSWORD
+#   4. rm .env && ./setup.sh && ./up.sh
+#   → Local auth is now disabled, only OAuth works.
+SELF_HOST_LOCAL_AUTH_EMAIL=admin@example.com
+SELF_HOST_LOCAL_AUTH_PASSWORD=changeme
+
+# GitHub OAuth (optional — add when ready)
 #   Create an OAuth app at https://github.com/settings/developers
 #   Set the callback URL to: <APP_URL>/v1/oauth/github/callback
 GITHUB_OAUTH_CLIENT_ID=
 GITHUB_OAUTH_CLIENT_SECRET=
 
-# Option 2: Google OAuth
+# Google OAuth (optional — add when ready)
 #   Create credentials at https://console.cloud.google.com/apis/credentials
 #   Set the redirect URI to: <APP_URL>/v1/oauth/google/callback
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
-
-# Option 3: Local email/password (simplest — no external services needed)
-#   Creates a bootstrap admin account on first start.
-SELF_HOST_LOCAL_AUTH_EMAIL=admin@example.com
-SELF_HOST_LOCAL_AUTH_PASSWORD=changeme
 
 
 # ========================== TLS & NETWORKING ================================

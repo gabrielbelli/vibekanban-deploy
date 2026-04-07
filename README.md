@@ -155,16 +155,26 @@ Only `APP_URL`, `RELAY_URL`, and one login method are required. The rest is opti
 
 ## Login methods
 
-Pick at least one in `config.sh`:
+### Local auth (default — works immediately)
 
-### Local auth (easiest)
-
-Just set an email and password. No external services.
+Pre-configured in `config.sh`. Just deploy and log in:
 
 ```sh
 SELF_HOST_LOCAL_AUTH_EMAIL=admin@example.com
 SELF_HOST_LOCAL_AUTH_PASSWORD=changeme
 ```
+
+> **Good to know:** this isn't a permanent account stored in the database. The server checks these env vars on every startup. Clear them → local auth is disabled. The user account you created stays, but nobody can log into it via email/password anymore.
+
+### Adding OAuth (recommended after initial setup)
+
+Once you're in, set up OAuth so your team can log in properly:
+
+1. Add OAuth credentials in `config.sh` (see below)
+2. Clear `SELF_HOST_LOCAL_AUTH_EMAIL` and `SELF_HOST_LOCAL_AUTH_PASSWORD`
+3. `rm .env && ./setup.sh && ./up.sh`
+
+Local auth is now gone. Only OAuth works.
 
 ### GitHub OAuth
 
