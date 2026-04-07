@@ -39,17 +39,12 @@ RELAY_URL=https://192.168.1.177:8443
 # --- Authentication ---
 # At least one login method must be configured.
 #
-# Local auth (default) — works out of the box, no external services needed.
-# The server checks these on every startup. Clear both to disable local auth.
-#
-# Recommended flow:
-#   1. Deploy with local auth → log in → set up your team
-#   2. Add OAuth credentials below
-#   3. Clear SELF_HOST_LOCAL_AUTH_EMAIL and SELF_HOST_LOCAL_AUTH_PASSWORD
-#   4. rm .env && ./setup.sh && ./up.sh
-#   → Local auth is now disabled, only OAuth works.
-SELF_HOST_LOCAL_AUTH_EMAIL=admin@example.com
-SELF_HOST_LOCAL_AUTH_PASSWORD=changeme
+# Local auth — quick bootstrap, no external services needed.
+# The server checks these on every startup. Clear both to disable.
+# Disabled by default. Uncomment to enable for initial setup, then
+# disable again once you've configured OAuth.
+#SELF_HOST_LOCAL_AUTH_EMAIL=admin@example.com
+#SELF_HOST_LOCAL_AUTH_PASSWORD=changeme
 
 # GitHub OAuth (optional — add when ready)
 #   Create an OAuth app at https://github.com/settings/developers
